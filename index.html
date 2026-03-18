@@ -1233,7 +1233,7 @@ function renderTable(markets, thresh, elimMin) {
       <td><span class="sector-tag sector-${m.sector}">${m.sector}</span></td>
       <td class="r tip-cell" data-tip="${m.question.replace(/"/g, '&quot;')}" style="color:${polyColor};">${fmtPct(s.polyPrice)}</td>
       <td class="r" style="color:${estColor};">${fmtPct(s.estProb)}</td>
-      <td class="r" style="color:${isArb||isStrg ? '#f0a030' : 'var(--text-hint)'};">${fmtC(absSprd)}</td>
+      <td class="r tip-cell" data-tip="Spread = |Est. Prob − Poly Price|. Wider spread → stronger ARB signal. Threshold is set by the ARB slider." style="color:${isArb||isStrg ? '#f0a030' : 'var(--text-hint)'};">${fmtC(absSprd)}</td>
       <td class="r">
         <div class="spread-bar-wrap">
           <div class="spread-bar" style="width:${barW.toFixed(0)}px;background:${barColor};"></div>
@@ -1247,7 +1247,14 @@ function renderTable(markets, thresh, elimMin) {
           </div>
         </div>
       </td>
-      <td class="r" style="color:${comboColor};font-weight:500;">${combo.toFixed(0)}</td>
+      <td class="r">
+        <div class="score-bar-wrap" style="justify-content:flex-end;">
+          <span style="color:${comboColor};font-weight:500;">${combo.toFixed(0)}</span>
+          <div class="score-bar-track">
+            <div class="score-bar-fill" style="width:${Math.min(combo,100)}%;background:${comboColor};"></div>
+          </div>
+        </div>
+      </td>
       <td class="r"><span class="arb-badge ${signalCls}">${signalText}</span></td>
       <td class="r" style="color:${statusColor};font-size:9px;letter-spacing:0.05em;">${statusText}</td>
     </tr>`;
