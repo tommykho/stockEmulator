@@ -395,15 +395,31 @@
     .sector-macro  { background: rgba(180,178,169,0.1); color: #888780; }
     .sector-energy { background: rgba(232,85,85,0.08); color: var(--red); }
 
-    .q-text {
-      max-width: 220px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+    /* ── Poly price tooltip (shows market question on hover) ─── */
+    .tip-cell { position: relative; cursor: help; }
+    .tip-cell::after {
+      content: attr(data-tip);
+      position: absolute;
+      bottom: calc(100% + 8px);
+      right: 0;
+      background: var(--bg-card);
+      border: 0.5px solid var(--border-hover);
       color: var(--text-secondary);
+      font-size: 10px;
+      line-height: 1.5;
+      padding: 6px 10px;
+      border-radius: var(--radius-md);
+      white-space: normal;
+      width: 220px;
+      z-index: 200;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.12s;
     }
+    .tip-cell:hover::after { opacity: 1; }
 
-    .spread-bar-wrap { display: flex; align-items: center; justify-content: flex-end; gap: 5px; }
+    .spread-bar-wrap { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
 
     .spread-bar {
       height: 5px;
@@ -432,7 +448,7 @@
     }
 
     .score-bar-track {
-      width: 60px;
+      width: 36px;
       height: 4px;
       background: var(--bg-tertiary);
       border-radius: 2px;
@@ -674,7 +690,6 @@
           <th class="r">Last</th>
           <th class="r">Chg</th>
           <th>Sector</th>
-          <th>Market question</th>
           <th class="r">Poly price</th>
           <th class="r">Est. prob</th>
           <th class="r">Spread</th>
@@ -686,7 +701,7 @@
         </tr>
       </thead>
       <tbody id="marketBody">
-        <tr class="empty-row"><td colspan="13">Press START SCAN to begin emulation</td></tr>
+        <tr class="empty-row"><td colspan="12">Press START SCAN to begin emulation</td></tr>
       </tbody>
     </table>
   </div>
@@ -1168,7 +1183,7 @@ function renderTable(markets, thresh, elimMin) {
     const isArb   = absSprd >= thresh && !isElim;
     const isStrg  = absSprd >= thresh * 1.8 && !isElim;
 
-    const barW     = Math.min(100, (absSprd / 0.30) * 100);
+    const barW     = Math.min(50, (absSprd / 0.30) * 100);
     const barColor = isStrg  ? '#1fc885'
                    : isArb   ? '#f0a030'
                    : isElim  ? '#555a63'
@@ -1199,17 +1214,15 @@ function renderTable(markets, thresh, elimMin) {
 
     const q         = quoteCache[m.ticker];
     const lastStr   = q?.last    != null ? (m.sector === 'crypto' ? '$' + q.last.toLocaleString('en-US', {maximumFractionDigits:2}) : '$' + q.last.toFixed(2)) : '—';
-    const chgStr    = q?.change  != null ? (q.change >= 0 ? '+' : '') + q.change.toFixed(2) : '—';
-    const chgPctStr = q?.changePct != null ? '(' + (q.changePct >= 0 ? '+' : '') + q.changePct.toFixed(2) + '%)' : '';
-    const chgColor  = !q || q.change == null ? 'var(--text-hint)' : q.change >= 0 ? 'var(--green)' : 'var(--red)';
+    const chgStr   = q?.changePct != null ? (q.changePct >= 0 ? '+' : '') + q.changePct.toFixed(2) + '%' : '—';
+    const chgColor = !q || q.changePct == null ? 'var(--text-hint)' : q.changePct >= 0 ? 'var(--green)' : 'var(--red)';
 
     return `<tr class="${isArb || isStrg ? 'arb-row' : ''}">
       <td>${tickerLinks(m.ticker)}</td>
       <td class="r" style="color:var(--text-primary);font-weight:500;">${lastStr}</td>
-      <td class="r" style="color:${chgColor};font-size:10px;">${chgStr} <span style="color:var(--text-hint)">${chgPctStr}</span></td>
+      <td class="r" style="color:${chgColor};">${chgStr}</td>
       <td><span class="sector-tag sector-${m.sector}">${m.sector}</span></td>
-      <td><span class="q-text" title="${m.question}">${m.question}</span></td>
-      <td class="r" style="color:${polyColor};">${fmtPct(s.polyPrice)}</td>
+      <td class="r tip-cell" data-tip="${m.question.replace(/"/g, '&quot;')}" style="color:${polyColor};">${fmtPct(s.polyPrice)}</td>
       <td class="r" style="color:${estColor};">${fmtPct(s.estProb)}</td>
       <td class="r" style="color:${isArb||isStrg ? '#f0a030' : 'var(--text-hint)'};">${fmtC(absSprd)}</td>
       <td class="r">
@@ -1257,7 +1270,7 @@ function resetAll() {
   document.getElementById('btnScan').textContent     = '▶ START SCAN';
   document.getElementById('btnScan').className       = 'btn btn-primary';
   document.getElementById('marketBody').innerHTML    =
-    '<tr class="empty-row"><td colspan="13">Press START SCAN to begin emulation</td></tr>';
+    '<tr class="empty-row"><td colspan="12">Press START SCAN to begin emulation</td></tr>';
   document.getElementById('logPanel').innerHTML =
     '<div class="log-entry"><span class="log-ts">--:--:--</span><span class="log-info">System reset.</span></div>';
   renderTrades();
