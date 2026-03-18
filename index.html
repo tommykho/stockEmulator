@@ -1141,22 +1141,27 @@ async function fetchLiveData(markets, thresh, elimMin) {
         new Date(mk.endDate).getTime() > now
       );
 
-      // Require the market question to actually mention the keyword or ticker
       const kwLower     = keyword.toLowerCase();
       const tickerLower = m.ticker.toLowerCase();
-      const relevant    = open.filter(mk => {
+
+      // Prefer markets whose question mentions the keyword, ticker, or $TICKER
+      const relevant = open.filter(mk => {
         const q = (mk.question || '').toLowerCase();
-        return q.includes(kwLower) || q.includes(tickerLower);
+        return q.includes(kwLower) || q.includes(tickerLower) || q.includes('$' + tickerLower);
       });
 
-      // Prefer binary Yes/No markets among relevant results
-      const binary = relevant.filter(mk => {
+      // If nothing relevant, fall back to all open markets (weak match)
+      const candidates  = relevant.length ? relevant : open;
+      const weakMatch   = !relevant.length && open.length > 0;
+
+      // Prefer binary Yes/No markets
+      const binary = candidates.filter(mk => {
         try {
           const oc = typeof mk.outcomes === 'string' ? JSON.parse(mk.outcomes) : mk.outcomes;
           return Array.isArray(oc) && oc.length === 2;
         } catch (_) { return false; }
       });
-      const pool = binary.length ? binary : relevant;
+      const pool = binary.length ? binary : candidates;
 
       if (pool.length) {
         const top  = pool.sort((a, b) => (parseFloat(b.volume) || 0) - (parseFloat(a.volume) || 0))[0];
@@ -1192,9 +1197,10 @@ async function fetchLiveData(markets, thresh, elimMin) {
         marketState[m.ticker].estProb    = jitter(m.base, m.vol * 0.3);
         marketState[m.ticker].stockScore = stockJitter(marketState[m.ticker].stockScore);
         fetchedAny = true;
-        addLog(`[${m.ticker}] "${top.question?.slice(0,55)}…" → ${(prob*100).toFixed(1)}¢`, 'log-scan');
+        const matchTag = weakMatch ? '~' : '';
+        addLog(`[${m.ticker}]${matchTag} "${top.question?.slice(0,55)}…" → ${(prob*100).toFixed(1)}¢`, weakMatch ? 'log-warn' : 'log-scan');
       } else {
-        addLog(`[${m.ticker}] No open Polymarket market for "${keyword}" — mock fallback.`, 'log-warn');
+        addLog(`[${m.ticker}] No open Polymarket markets at all for "${keyword}" — mock fallback.`, 'log-warn');
         const s = marketState[m.ticker];
         s.polyPrice  = jitter(s.polyPrice, m.vol * 0.4);
         s.estProb    = jitter(m.base,      m.vol * 0.5);
@@ -1324,7 +1330,7 @@ function renderTable(markets, thresh, elimMin) {
       <td class="r" style="color:var(--text-primary);font-weight:500;">${lastStr}</td>
       <td class="r" style="color:${chgColor};">${chgStr}</td>
       <td><span class="sector-tag sector-${m.sector}">${m.sector}</span></td>
-      <td class="r tip-cell" data-tip="${m.question.replace(/"/g, '&quot;')}" style="color:${polyColor};">${fmtPct(s.polyPrice)}</td>
+      <td class="r tip-cell" data-tip="${m.question.replace(/"/g, '&quot;')}" style="color:${polyColor};">${fmtC(s.polyPrice)}</td>
       <td class="r" style="color:${estColor};">${fmtPct(s.estProb)}</td>
       <td class="r tip-cell" data-tip="Spread = |Est. Prob − Poly Price|. Wider spread → stronger ARB signal. Threshold is set by the ARB slider.">
         <div class="score-bar-wrap" style="justify-content:flex-end;">
