@@ -1127,7 +1127,7 @@ async function fetchLiveData(markets, thresh, elimMin) {
   for (const m of markets) {
     try {
       const keyword = TICKER_KEYWORDS[m.ticker] || m.ticker.toLowerCase();
-      const url  = `${CONFIG.polymarketAPI}?search=${encodeURIComponent(keyword)}&active=true&closed=false&limit=10`;
+      const url  = `${CONFIG.polymarketAPI}?search=${encodeURIComponent(keyword)}&active=true&closed=false&limit=20`;
       const res  = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -1141,14 +1141,22 @@ async function fetchLiveData(markets, thresh, elimMin) {
         new Date(mk.endDate).getTime() > now
       );
 
-      // Prefer binary Yes/No markets; filter out implausible probabilities
-      const binary = open.filter(mk => {
+      // Require the market question to actually mention the keyword or ticker
+      const kwLower     = keyword.toLowerCase();
+      const tickerLower = m.ticker.toLowerCase();
+      const relevant    = open.filter(mk => {
+        const q = (mk.question || '').toLowerCase();
+        return q.includes(kwLower) || q.includes(tickerLower);
+      });
+
+      // Prefer binary Yes/No markets among relevant results
+      const binary = relevant.filter(mk => {
         try {
           const oc = typeof mk.outcomes === 'string' ? JSON.parse(mk.outcomes) : mk.outcomes;
           return Array.isArray(oc) && oc.length === 2;
         } catch (_) { return false; }
       });
-      const pool = binary.length ? binary : open;
+      const pool = binary.length ? binary : relevant;
 
       if (pool.length) {
         const top  = pool.sort((a, b) => (parseFloat(b.volume) || 0) - (parseFloat(a.volume) || 0))[0];
