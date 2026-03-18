@@ -1168,11 +1168,11 @@ async function fetchLiveData(markets, thresh, elimMin) {
             ? JSON.parse(top.outcomePrices)
             : top.outcomePrices;
           const raw = parseFloat(prices?.[yesIdx]);
-          if (!isNaN(raw) && raw >= 0.05 && raw <= 0.95) prob = raw;
+          if (!isNaN(raw) && raw > 0 && raw < 1) prob = raw;
         } catch (_) {}
 
         if (prob === null) {
-          addLog(`[${m.ticker}] Prob out of range — mock fallback.`, 'log-warn');
+          addLog(`[${m.ticker}] No valid probability from API — mock fallback.`, 'log-warn');
           const s = marketState[m.ticker];
           s.polyPrice  = jitter(s.polyPrice, m.vol * 0.4);
           s.estProb    = jitter(m.base,      m.vol * 0.5);
