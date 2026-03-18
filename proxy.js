@@ -1,10 +1,13 @@
 /**
- * Zero-dependency CORS proxy for Polymarket Gamma API.
+ * Zero-dependency CORS proxy.
+ * Routes:
+ *   /markets* → gamma-api.polymarket.com
+ *   /yahoo/*  → query1.finance.yahoo.com  (strip /yahoo prefix)
+ *
  * Run: node proxy.js
- * Then set DATA SOURCE to "Live" in the UI.
  *
  * Config via .env (optional):
- *   PROXY_PORT=8010
+ *   PROXY_PORT=8011
  */
 const http  = require('http');
 const https = require('https');
@@ -20,8 +23,25 @@ if (fs.existsSync(envPath)) {
   });
 }
 
-const TARGET_HOST = 'gamma-api.polymarket.com';
-const PORT        = parseInt(process.env.PROXY_PORT || '8010', 10);
+const PORT = parseInt(process.env.PROXY_PORT || '8011', 10);
+
+const ROUTES = {
+  '/yahoo': 'query1.finance.yahoo.com',
+  '/':      'gamma-api.polymarket.com',
+};
+
+function resolveRoute(url) {
+  if (url.startsWith('/yahoo')) {
+    return {
+      hostname:   'query1.finance.yahoo.com',
+      targetPath: url.slice('/yahoo'.length) || '/',
+    };
+  }
+  return {
+    hostname:   'gamma-api.polymarket.com',
+    targetPath: url,
+  };
+}
 
 http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin',  '*');
@@ -30,29 +50,36 @@ http.createServer((req, res) => {
 
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
+  const { hostname, targetPath } = resolveRoute(req.url);
+
   const options = {
-    hostname: TARGET_HOST,
-    path:     req.url,
-    method:   'GET',
-    headers:  { host: TARGET_HOST, accept: 'application/json' },
+    hostname,
+    path:    targetPath,
+    method:  'GET',
+    headers: {
+      host:            hostname,
+      accept:          'application/json',
+      'user-agent':    'Mozilla/5.0 (compatible; stockEmulator/0.1)',
+    },
   };
 
   const proxy = https.request(options, (upstream) => {
     res.writeHead(upstream.statusCode, {
-      'content-type': upstream.headers['content-type'] || 'application/json',
+      'content-type':                upstream.headers['content-type'] || 'application/json',
       'access-control-allow-origin': '*',
     });
     upstream.pipe(res);
   });
 
   proxy.on('error', (err) => {
-    console.error('Proxy error:', err.message);
+    console.error(`[${hostname}] ${err.message}`);
     res.writeHead(502);
     res.end(JSON.stringify({ error: err.message }));
   });
 
   proxy.end();
 }).listen(PORT, () => {
-  console.log(`CORS proxy → https://${TARGET_HOST}`);
-  console.log(`Listening  on http://localhost:${PORT}`);
+  console.log(`CORS proxy listening on http://localhost:${PORT}`);
+  console.log(`  /markets* → https://gamma-api.polymarket.com`);
+  console.log(`  /yahoo/*  → https://query1.finance.yahoo.com`);
 });

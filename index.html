@@ -348,7 +348,39 @@
       border: 0.5px solid var(--border);
       letter-spacing: 0.05em;
       color: var(--text-primary);
+      text-decoration: none;
+      cursor: pointer;
     }
+    .ticker-pill:hover {
+      background: var(--bg-card);
+      border-color: var(--border-hover);
+      color: var(--blue);
+    }
+
+    .ticker-links {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      z-index: 100;
+      background: var(--bg-card);
+      border: 0.5px solid var(--border-hover);
+      border-radius: var(--radius-md);
+      padding: 4px 0;
+      min-width: 160px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .ticker-wrap { position: relative; display: inline-block; }
+    .ticker-wrap:hover .ticker-links { display: block; }
+    .ticker-links a {
+      display: block;
+      padding: 5px 12px;
+      font-size: 10px;
+      color: var(--text-secondary);
+      text-decoration: none;
+      letter-spacing: 0.03em;
+    }
+    .ticker-links a:hover { background: var(--bg-tertiary); color: var(--text-primary); }
 
     .sector-tag {
       display: inline-block;
@@ -639,6 +671,8 @@
       <thead>
         <tr>
           <th>Ticker</th>
+          <th class="r">Last</th>
+          <th class="r">Chg</th>
           <th>Sector</th>
           <th>Market question</th>
           <th class="r">Poly price</th>
@@ -652,7 +686,7 @@
         </tr>
       </thead>
       <tbody id="marketBody">
-        <tr class="empty-row"><td colspan="11">Press START SCAN to begin emulation</td></tr>
+        <tr class="empty-row"><td colspan="13">Press START SCAN to begin emulation</td></tr>
       </tbody>
     </table>
   </div>
@@ -700,13 +734,37 @@
 
 /* ── Config ─────────────────────────────────────────────────── */
 const CONFIG = {
-  // Run `node proxy.js` first; proxy forwards to gamma-api.polymarket.com with CORS headers
-  polymarketAPI: 'http://localhost:8011/markets',
+  // Run `node proxy.js` first — proxy handles CORS for both APIs
+  polymarketAPI: 'http://localhost:8012/markets',
+  yahooAPI:      'http://localhost:8012/yahoo/v8/finance/chart',
   stockWeight:   0.70,
   polyWeight:    0.30,
   maxLogLines:   80,
   maxTrades:     200,
+  quoteCacheTTL: 30000, // ms — don't hammer Yahoo Finance every scan
 };
+
+/* ── Yahoo Finance symbol map (crypto needs -USD suffix) ─────── */
+const YAHOO_SYMBOLS = {
+  BTC: 'BTC-USD', ETH: 'ETH-USD', SOL: 'SOL-USD',
+};
+function toYahooSymbol(ticker) { return YAHOO_SYMBOLS[ticker] || ticker; }
+
+/* ── External link builder ───────────────────────────────────── */
+const CRYPTO_TICKERS = new Set(['BTC','ETH','SOL']);
+function tickerLinks(ticker) {
+  const isCrypto = CRYPTO_TICKERS.has(ticker);
+  const mwSlug   = isCrypto ? `cryptocurrency/${ticker.toLowerCase()}usd` : `stock/${ticker.toLowerCase()}`;
+  const yfSymbol = toYahooSymbol(ticker);
+  return `
+    <div class="ticker-wrap">
+      <span class="ticker-pill">${ticker}</span>
+      <div class="ticker-links">
+        <a href="https://www.marketwatch.com/investing/${mwSlug}?mod=u.s.-market-data" target="_blank" rel="noopener">MarketWatch ↗</a>
+        <a href="https://finance.yahoo.com/quote/${yfSymbol}/" target="_blank" rel="noopener">Yahoo Finance ↗</a>
+      </div>
+    </div>`;
+}
 
 /* ── Mock market data ────────────────────────────────────────── */
 const MOCK_MARKETS = [
@@ -738,6 +796,8 @@ let bestTicker   = '—';
 let logLines     = [];
 let tradeHistory = [];
 let marketState  = {};
+let quoteCache   = {};   // { [ticker]: { last, change, changePct } }
+let quoteCacheTs = 0;
 
 MOCK_MARKETS.forEach(m => {
   marketState[m.ticker] = {
@@ -892,12 +952,45 @@ function animateProgress() {
   rafTimer = requestAnimationFrame(step);
 }
 
+/* ── Yahoo Finance quote fetch (v8 chart, parallel, 30s cache) ── */
+async function fetchStockQuotes(tickers) {
+  if (Date.now() - quoteCacheTs < CONFIG.quoteCacheTTL) return;
+
+  const results = await Promise.allSettled(tickers.map(async ticker => {
+    const symbol = toYahooSymbol(ticker);
+    const url    = `${CONFIG.yahooAPI}/${symbol}?interval=1d&range=1d`;
+    const res    = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data   = await res.json();
+    const meta   = data?.chart?.result?.[0]?.meta;
+    if (!meta) throw new Error('no meta');
+    const last   = meta.regularMarketPrice;
+    const prev   = meta.chartPreviousClose;
+    return { ticker, last, change: last - prev, changePct: ((last - prev) / prev) * 100 };
+  }));
+
+  let ok = 0;
+  results.forEach(r => {
+    if (r.status === 'fulfilled') {
+      const { ticker, last, change, changePct } = r.value;
+      quoteCache[ticker] = { last, change, changePct };
+      ok++;
+    }
+  });
+
+  quoteCacheTs = Date.now();
+  if (ok > 0) addLog(`Stock prices refreshed (${ok}/${tickers.length}).`, 'log-scan');
+  else         addLog('Yahoo Finance unavailable — price columns will show —.', 'log-warn');
+}
+
 /* ── Main scan ───────────────────────────────────────────────── */
 async function runScan() {
   const sector   = getSector();
   const thresh   = getThresh();
   const elimMin  = getElimScore();
   const filtered = MOCK_MARKETS.filter(m => sector === 'all' || m.sector === sector);
+
+  await fetchStockQuotes(filtered.map(m => m.ticker));
 
   if (getDataSrc() === 'live') {
     await fetchLiveData(filtered, thresh, elimMin);
@@ -1087,8 +1180,16 @@ function renderTable(markets, thresh, elimMin) {
     const statusText  = isElim ? 'ELIMINATED' : 'ACTIVE';
     const statusColor = isElim ? 'var(--text-hint)' : 'var(--green)';
 
+    const q         = quoteCache[m.ticker];
+    const lastStr   = q?.last    != null ? (m.sector === 'crypto' ? '$' + q.last.toLocaleString('en-US', {maximumFractionDigits:2}) : '$' + q.last.toFixed(2)) : '—';
+    const chgStr    = q?.change  != null ? (q.change >= 0 ? '+' : '') + q.change.toFixed(2) : '—';
+    const chgPctStr = q?.changePct != null ? '(' + (q.changePct >= 0 ? '+' : '') + q.changePct.toFixed(2) + '%)' : '';
+    const chgColor  = !q || q.change == null ? 'var(--text-hint)' : q.change >= 0 ? 'var(--green)' : 'var(--red)';
+
     return `<tr class="${isArb || isStrg ? 'arb-row' : ''}">
-      <td><span class="ticker-pill">${m.ticker}</span></td>
+      <td>${tickerLinks(m.ticker)}</td>
+      <td class="r" style="color:var(--text-primary);font-weight:500;">${lastStr}</td>
+      <td class="r" style="color:${chgColor};font-size:10px;">${chgStr} <span style="color:var(--text-hint)">${chgPctStr}</span></td>
       <td><span class="sector-tag sector-${m.sector}">${m.sector}</span></td>
       <td><span class="q-text" title="${m.question}">${m.question}</span></td>
       <td class="r" style="color:${polyColor};">${fmtPct(s.polyPrice)}</td>
@@ -1121,6 +1222,8 @@ function resetAll() {
   elimCount = 0; bestSpread = 0; bestTicker = '—';
   tradeHistory = [];
   logLines     = [];
+  quoteCache   = {};
+  quoteCacheTs = 0;
   MOCK_MARKETS.forEach(m => {
     marketState[m.ticker] = {
       polyPrice:  m.base,
@@ -1142,7 +1245,7 @@ function resetAll() {
   document.getElementById('btnScan').textContent     = '▶ START SCAN';
   document.getElementById('btnScan').className       = 'btn btn-primary';
   document.getElementById('marketBody').innerHTML    =
-    '<tr class="empty-row"><td colspan="11">Press START SCAN to begin emulation</td></tr>';
+    '<tr class="empty-row"><td colspan="13">Press START SCAN to begin emulation</td></tr>';
   document.getElementById('logPanel').innerHTML =
     '<div class="log-entry"><span class="log-ts">--:--:--</span><span class="log-info">System reset.</span></div>';
   renderTrades();
