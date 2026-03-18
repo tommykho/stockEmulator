@@ -693,7 +693,6 @@
           <th class="r">Poly price</th>
           <th class="r">Est. prob</th>
           <th class="r">Spread</th>
-          <th class="r">Spread</th>
           <th class="r">Stock score</th>
           <th class="r">Combined</th>
           <th class="r">Signal</th>
@@ -701,7 +700,7 @@
         </tr>
       </thead>
       <tbody id="marketBody">
-        <tr class="empty-row"><td colspan="12">Press START SCAN to begin emulation</td></tr>
+        <tr class="empty-row"><td colspan="11">Press START SCAN to begin emulation</td></tr>
       </tbody>
     </table>
   </div>
@@ -1233,10 +1232,12 @@ function renderTable(markets, thresh, elimMin) {
       <td><span class="sector-tag sector-${m.sector}">${m.sector}</span></td>
       <td class="r tip-cell" data-tip="${m.question.replace(/"/g, '&quot;')}" style="color:${polyColor};">${fmtPct(s.polyPrice)}</td>
       <td class="r" style="color:${estColor};">${fmtPct(s.estProb)}</td>
-      <td class="r tip-cell" data-tip="Spread = |Est. Prob − Poly Price|. Wider spread → stronger ARB signal. Threshold is set by the ARB slider." style="color:${isArb||isStrg ? '#f0a030' : 'var(--text-hint)'};">${fmtC(absSprd)}</td>
-      <td class="r">
-        <div class="spread-bar-wrap">
-          <div class="spread-bar" style="width:${barW.toFixed(0)}px;background:${barColor};"></div>
+      <td class="r tip-cell" data-tip="Spread = |Est. Prob − Poly Price|. Wider spread → stronger ARB signal. Threshold is set by the ARB slider.">
+        <div class="score-bar-wrap" style="justify-content:flex-end;">
+          <span style="color:${isArb||isStrg ? '#f0a030' : 'var(--text-hint)'};">${fmtC(absSprd)}</span>
+          <div class="score-bar-track">
+            <div class="score-bar-fill" style="width:${Math.min(100,(absSprd/0.30)*100).toFixed(0)}%;background:${barColor};"></div>
+          </div>
         </div>
       </td>
       <td class="r">
@@ -1286,7 +1287,7 @@ function resetAll() {
   document.getElementById('btnScan').textContent     = '▶ START SCAN';
   document.getElementById('btnScan').className       = 'btn btn-primary';
   document.getElementById('marketBody').innerHTML    =
-    '<tr class="empty-row"><td colspan="12">Press START SCAN to begin emulation</td></tr>';
+    '<tr class="empty-row"><td colspan="11">Press START SCAN to begin emulation</td></tr>';
   document.getElementById('logPanel').innerHTML =
     '<div class="log-entry"><span class="log-ts">--:--:--</span><span class="log-info">System reset.</span></div>';
   renderTrades();
