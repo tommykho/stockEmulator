@@ -744,14 +744,12 @@ const CONFIG = {
   quoteCacheTTL: 30000, // ms — don't hammer Yahoo Finance every scan
 };
 
-/* ── Yahoo Finance symbol map (crypto needs -USD suffix) ─────── */
-const YAHOO_SYMBOLS = {
-  BTC: 'BTC-USD', ETH: 'ETH-USD', SOL: 'SOL-USD',
-};
+/* ── Configurable maps — defaults; overridden by loadConfig() ── */
+let YAHOO_SYMBOLS  = { BTC: 'BTC-USD', ETH: 'ETH-USD', SOL: 'SOL-USD' };
+let CRYPTO_TICKERS = new Set(['BTC','ETH','SOL']);
 function toYahooSymbol(ticker) { return YAHOO_SYMBOLS[ticker] || ticker; }
 
 /* ── External link builder ───────────────────────────────────── */
-const CRYPTO_TICKERS = new Set(['BTC','ETH','SOL']);
 function tickerLinks(ticker) {
   const isCrypto = CRYPTO_TICKERS.has(ticker);
   const mwSlug   = isCrypto ? `cryptocurrency/${ticker.toLowerCase()}usd` : `stock/${ticker.toLowerCase()}`;
@@ -766,20 +764,34 @@ function tickerLinks(ticker) {
     </div>`;
 }
 
-/* ── Mock market data ────────────────────────────────────────── */
-const MOCK_MARKETS = [
-  { ticker:'NVDA',  sector:'tech',   question:'NVDA closes above $900 this week?',              base:0.62, vol:0.08 },
-  { ticker:'TSLA',  sector:'tech',   question:'Tesla earnings beat Q1 estimates?',               base:0.44, vol:0.12 },
-  { ticker:'AAPL',  sector:'tech',   question:'Apple announces AI model before June?',           base:0.55, vol:0.07 },
-  { ticker:'MSFT',  sector:'tech',   question:'Microsoft Copilot+ hits 50M users this Q?',      base:0.47, vol:0.06 },
-  { ticker:'GOOGL', sector:'tech',   question:'Google unveils Gemini 2.0 Ultra this month?',    base:0.53, vol:0.09 },
-  { ticker:'BTC',   sector:'crypto', question:'Bitcoin reaches $110k by month end?',             base:0.38, vol:0.15 },
-  { ticker:'ETH',   sector:'crypto', question:'Ethereum ETF net inflow positive this week?',    base:0.51, vol:0.10 },
-  { ticker:'SOL',   sector:'crypto', question:'Solana outperforms BTC in next 7 days?',         base:0.41, vol:0.13 },
-  { ticker:'SPY',   sector:'macro',  question:'Fed holds rates at next FOMC meeting?',          base:0.71, vol:0.05 },
-  { ticker:'GLD',   sector:'macro',  question:'Gold price above $2,400 end of month?',          base:0.65, vol:0.06 },
-  { ticker:'XOM',   sector:'energy', question:'Oil stays above $78/bbl through Friday?',        base:0.58, vol:0.09 },
-  { ticker:'CVX',   sector:'energy', question:'Chevron raises dividend in Q2 announcement?',    base:0.49, vol:0.07 },
+/* ── Per-ticker simulation defaults (question / base prob / volatility) ─ */
+const MARKET_DEFAULTS = {
+  NVDA:  { question:'NVDA closes above $900 this week?',              base:0.62, vol:0.08 },
+  TSLA:  { question:'Tesla earnings beat Q1 estimates?',               base:0.44, vol:0.12 },
+  AAPL:  { question:'Apple announces AI model before June?',           base:0.55, vol:0.07 },
+  MSFT:  { question:'Microsoft Copilot+ hits 50M users this Q?',      base:0.47, vol:0.06 },
+  GOOGL: { question:'Google unveils Gemini 2.0 Ultra this month?',    base:0.53, vol:0.09 },
+  BTC:   { question:'Bitcoin reaches $110k by month end?',             base:0.38, vol:0.15 },
+  ETH:   { question:'Ethereum ETF net inflow positive this week?',    base:0.51, vol:0.10 },
+  SOL:   { question:'Solana outperforms BTC in next 7 days?',         base:0.41, vol:0.13 },
+  SPY:   { question:'Fed holds rates at next FOMC meeting?',          base:0.71, vol:0.05 },
+  GLD:   { question:'Gold price above $2,400 end of month?',          base:0.65, vol:0.06 },
+  XOM:   { question:'Oil stays above $78/bbl through Friday?',        base:0.58, vol:0.09 },
+  CVX:   { question:'Chevron raises dividend in Q2 announcement?',    base:0.49, vol:0.07 },
+};
+
+function buildMarket(ticker, sector) {
+  const d = MARKET_DEFAULTS[ticker] || { question:`Will ${ticker} hit target this month?`, base:0.50, vol:0.10 };
+  return { ticker, sector, question: d.question, base: d.base, vol: d.vol };
+}
+
+/* ── Mock market list — rebuilt by loadConfig() if proxy is running ── */
+let MOCK_MARKETS = [
+  buildMarket('NVDA','tech'), buildMarket('TSLA','tech'),  buildMarket('AAPL','tech'),
+  buildMarket('MSFT','tech'), buildMarket('GOOGL','tech'),
+  buildMarket('BTC','crypto'), buildMarket('ETH','crypto'), buildMarket('SOL','crypto'),
+  buildMarket('SPY','macro'),  buildMarket('GLD','macro'),
+  buildMarket('XOM','energy'), buildMarket('CVX','energy'),
 ];
 
 /* ── State ───────────────────────────────────────────────────── */
@@ -799,13 +811,18 @@ let marketState  = {};
 let quoteCache   = {};   // { [ticker]: { last, change, changePct } }
 let quoteCacheTs = 0;
 
-MOCK_MARKETS.forEach(m => {
-  marketState[m.ticker] = {
-    polyPrice:  m.base,
-    estProb:    m.base,
-    stockScore: Math.round(40 + Math.random() * 40),
-  };
-});
+function initMarketState() {
+  MOCK_MARKETS.forEach(m => {
+    if (!marketState[m.ticker]) {
+      marketState[m.ticker] = {
+        polyPrice:  m.base,
+        estProb:    m.base,
+        stockScore: Math.round(40 + Math.random() * 40),
+      };
+    }
+  });
+}
+initMarketState();
 
 /* ── Helpers ─────────────────────────────────────────────────── */
 function nowStr() {
@@ -1012,8 +1029,8 @@ function runMockScan(markets, thresh, elimMin) {
   processScan(markets, thresh, elimMin);
 }
 
-/* ── Ticker → Polymarket search keyword map ──────────────────── */
-const TICKER_KEYWORDS = {
+/* ── Ticker → Polymarket search keyword map (overridden by loadConfig) ── */
+let TICKER_KEYWORDS = {
   NVDA:  'nvidia',  TSLA:  'tesla',   AAPL:  'apple',
   MSFT:  'microsoft', GOOGL: 'google', BTC:   'bitcoin',
   ETH:   'ethereum', SOL:   'solana',  SPY:   'fed rate',
@@ -1224,13 +1241,8 @@ function resetAll() {
   logLines     = [];
   quoteCache   = {};
   quoteCacheTs = 0;
-  MOCK_MARKETS.forEach(m => {
-    marketState[m.ticker] = {
-      polyPrice:  m.base,
-      estProb:    m.base,
-      stockScore: Math.round(40 + Math.random() * 40),
-    };
-  });
+  marketState = {};
+  initMarketState();
   document.getElementById('mScanned').textContent    = '0';
   document.getElementById('mScannedSub').textContent = '—';
   document.getElementById('mArbs').textContent       = '0';
@@ -1291,6 +1303,37 @@ function downloadFile(filename, content, type) {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+/* ── Config loader — fetches ticker config from proxy /config ── */
+async function loadConfig() {
+  try {
+    const base = CONFIG.polymarketAPI.replace('/markets', '');
+    const res  = await fetch(`${base}/config`, { signal: AbortSignal.timeout(2000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const cfg = await res.json();
+
+    if (cfg.polymarketKeywords && Object.keys(cfg.polymarketKeywords).length)
+      TICKER_KEYWORDS = cfg.polymarketKeywords;
+
+    if (cfg.yahooSymbols && Object.keys(cfg.yahooSymbols).length)
+      YAHOO_SYMBOLS = cfg.yahooSymbols;
+
+    if (cfg.cryptoTickers && cfg.cryptoTickers.length)
+      CRYPTO_TICKERS = new Set(cfg.cryptoTickers);
+
+    if (cfg.tickers && cfg.tickers.length && cfg.sectors) {
+      MOCK_MARKETS = cfg.tickers.map(t => buildMarket(t, cfg.sectors[t] || 'macro'));
+      marketState  = {};
+      initMarketState();
+      addLog(`Config loaded from proxy: ${cfg.tickers.join(', ')}`, 'log-scan');
+    }
+  } catch (_) {
+    // Proxy not running or mock mode — defaults remain, no error shown
+  }
+}
+
+// Load config on startup (non-blocking — defaults used if proxy unavailable)
+loadConfig();
 
 </script>
 </body>

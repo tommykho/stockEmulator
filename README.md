@@ -33,8 +33,10 @@ node proxy.js
 ```
 
 ```
-CORS proxy → https://gamma-api.polymarket.com
-Listening  on http://localhost:8011
+CORS proxy  http://localhost:8012
+  GET /config   → ticker config from .env
+  /markets*     → https://gamma-api.polymarket.com
+  /yahoo/*      → https://query1.finance.yahoo.com
 ```
 
 **2. Open the app:**
@@ -60,18 +62,32 @@ Copy `.env.example` to `.env` and adjust as needed:
 cp .env.example .env
 ```
 
+Restart `node proxy.js` after any change. `.env` is gitignored — never commit it.
+
+### Ticker config
+
+All symbols and sectors are configured in `.env`. The proxy reads them at startup and serves them to `index.html` via `GET /config`. If the proxy is not running, `index.html` falls back to built-in defaults.
+
+| Variable | Format | Purpose |
+|---|---|---|
+| `TICKERS` | `NVDA,TSLA,BTC` | Tickers to scan (comma-separated) |
+| `TICKER_SECTORS` | `NVDA:tech,BTC:crypto` | Sector per ticker — drives the sector filter |
+| `POLYMARKET_KEYWORDS` | `NVDA:nvidia,BTC:bitcoin` | Keyword mapped to each ticker for Gamma API search |
+| `YAHOO_SYMBOLS` | `BTC:BTC-USD,ETH:ETH-USD` | Yahoo Finance symbol overrides (crypto needs `-USD` suffix) |
+| `CRYPTO_TICKERS` | `BTC,ETH,SOL` | Tickers treated as crypto (MarketWatch URL + Yahoo suffix) |
+| `PROXY_PORT` | `8012` | Local proxy port |
+
+**Available sectors:** `tech` · `crypto` · `macro` · `energy`
+
+**Adding a new ticker** — add it to all five variables, then restart the proxy:
+
 ```env
-# Proxy port (default: 8011)
-PROXY_PORT=8011
-
-# Optional: paid stock data API key (not required for Yahoo Finance / mock mode)
-# STOCK_API_KEY=your_key_here
-
-# Optional: Polymarket CLOB API key (only needed for private/authenticated markets)
-# POLYMARKET_API_KEY=your_key_here
+TICKERS=NVDA,...,AMZN
+TICKER_SECTORS=...,AMZN:tech
+POLYMARKET_KEYWORDS=...,AMZN:amazon
+# YAHOO_SYMBOLS — no entry needed for standard stocks
+# CRYPTO_TICKERS — no entry needed for stocks
 ```
-
-> `.env` is gitignored. Never commit real keys.
 
 ---
 
@@ -135,17 +151,6 @@ Polymarket Gamma API                     Yahoo Finance
 | **Eliminator** | `src/eliminator.js` | Merge scores, apply threshold, rank |
 
 ---
-
-## Ticker → Polymarket keyword map
-
-The Gamma API searches by question text, not ticker symbols. The following mappings are used:
-
-```
-NVDA → nvidia     TSLA → tesla      AAPL → apple
-MSFT → microsoft  GOOGL → google    BTC  → bitcoin
-ETH  → ethereum   SOL  → solana     SPY  → fed rate
-GLD  → gold       XOM  → oil        CVX  → chevron
-```
 
 ---
 
