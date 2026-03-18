@@ -1,0 +1,13 @@
+{
+  "name": "stock-emulator",
+  "version": "0.1.0",
+  "description": "Polymarket + Stock ARB detector emulator",
+  "scripts": {
+    "proxy": "node proxy.js",
+    "serve": "npx serve .",
+    "start": "node proxy.js & npx serve ."
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

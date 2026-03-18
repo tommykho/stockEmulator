@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>stockEmulator — ARB Detector</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg-primary:    #0d0e10;
+      --bg-secondary:  #141618;
+      --bg-tertiary:   #1a1c1f;
+      --bg-card:       #1e2024;
+      --border:        rgba(255,255,255,0.08);
+      --border-hover:  rgba(255,255,255,0.14);
+      --text-primary:  #e8e9ea;
+      --text-secondary:#8a8f98;
+      --text-hint:     #555a63;
+      --green:         #1fc885;
+      --green-dim:     #0f6e56;
+      --green-bg:      rgba(31,200,133,0.07);
+      --amber:         #f0a030;
+      --amber-bg:      rgba(240,160,48,0.08);
+      --red:           #e85555;
+      --red-dim:       #7a2a2a;
+      --blue:          #4a9eff;
+      --blue-bg:       rgba(74,158,255,0.08);
+      --font-mono:     'IBM Plex Mono', monospace;
+      --font-sans:     'IBM Plex Sans', sans-serif;
+      --radius-sm:     4px;
+      --radius-md:     6px;
+      --radius-lg:     10px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.5;
+      overflow-x: hidden;
+    }
+
+    /* ── Layout ───────────────────────────────────────────────── */
+    .app {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 0 1rem;
+    }
+
+    /* ── Header ───────────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 0 14px;
+      border-bottom: 0.5px solid var(--border);
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .header-left { display: flex; flex-direction: column; gap: 3px; }
+
+    .app-title {
+      font-family: var(--font-sans);
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      color: var(--text-primary);
+    }
+
+    .app-title span { color: var(--green); }
+
+    .app-meta {
+      font-size: 10px;
+      color: var(--text-hint);
+      letter-spacing: 0.04em;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 3px 9px;
+      border-radius: var(--radius-sm);
+      letter-spacing: 0.07em;
+    }
+
+    .badge-idle    { background: var(--bg-card); color: var(--text-hint); border: 0.5px solid var(--border); }
+    .badge-live    { background: rgba(31,200,133,0.12); color: var(--green); border: 0.5px solid var(--green-dim); }
+    .badge-paused  { background: var(--amber-bg); color: var(--amber); border: 0.5px solid rgba(240,160,48,0.3); }
+
+    .badge-live::before {
+      content: '';
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%,100% { opacity: 1; transform: scale(1); }
+      50%      { opacity: 0.4; transform: scale(0.85); }
+    }
+
+    .data-source-badge {
+      font-size: 10px;
+      padding: 3px 8px;
+      border-radius: var(--radius-sm);
+      border: 0.5px solid var(--border);
+      color: var(--text-secondary);
+      background: var(--bg-card);
+    }
+
+    .data-source-badge.live-data { color: var(--blue); border-color: rgba(74,158,255,0.3); background: var(--blue-bg); }
+
+    /* ── Progress bar ─────────────────────────────────────────── */
+    .progress-track {
+      height: 2px;
+      background: var(--bg-tertiary);
+      margin: 12px 0;
+      border-radius: 1px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 2px;
+      background: var(--green);
+      width: 0%;
+      border-radius: 1px;
+      transition: width 0.15s linear;
+    }
+
+    /* ── Controls ─────────────────────────────────────────────── */
+    .controls {
+      display: flex;
+      align-items: flex-end;
+      gap: 14px;
+      flex-wrap: wrap;
+      padding: 12px 0 14px;
+      border-bottom: 0.5px solid var(--border);
+    }
+
+    .ctrl { display: flex; flex-direction: column; gap: 5px; }
+
+    .ctrl-label {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-hint);
+    }
+
+    .ctrl-row { display: flex; align-items: center; gap: 7px; }
+
+    .ctrl-val {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-primary);
+      min-width: 30px;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 90px;
+      height: 3px;
+      background: var(--bg-tertiary);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 12px; height: 12px;
+      border-radius: 50%;
+      background: var(--green);
+      border: 2px solid var(--bg-primary);
+      cursor: pointer;
+    }
+
+    select {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      padding: 5px 10px;
+      background: var(--bg-card);
+      color: var(--text-primary);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      outline: none;
+    }
+    select:hover { border-color: var(--border-hover); }
+
+    .btn {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      padding: 6px 16px;
+      border-radius: var(--radius-sm);
+      border: 0.5px solid var(--border);
+      cursor: pointer;
+      letter-spacing: 0.04em;
+      transition: all 0.12s;
+      background: transparent;
+      color: var(--text-primary);
+    }
+    .btn:hover { background: var(--bg-tertiary); border-color: var(--border-hover); }
+    .btn:active { transform: scale(0.97); }
+
+    .btn-primary { border-color: var(--green-dim); color: var(--green); }
+    .btn-primary:hover { background: var(--green-bg); }
+
+    .btn-stop { border-color: var(--red-dim); color: var(--red); }
+    .btn-stop:hover { background: rgba(232,85,85,0.07); }
+
+    .btn-sm { font-size: 10px; padding: 4px 10px; }
+
+    /* ── Metrics ──────────────────────────────────────────────── */
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 8px;
+      padding: 14px 0;
+    }
+
+    .metric-card {
+      background: var(--bg-card);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 12px 14px;
+    }
+
+    .metric-label {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--text-hint);
+      margin-bottom: 6px;
+    }
+
+    .metric-val {
+      font-size: 22px;
+      font-weight: 500;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-primary);
+    }
+
+    .metric-val.green  { color: var(--green); }
+    .metric-val.amber  { color: var(--amber); }
+    .metric-val.red    { color: var(--red); }
+    .metric-val.blue   { color: var(--blue); }
+
+    .metric-sub {
+      font-size: 10px;
+      color: var(--text-hint);
+      margin-top: 3px;
+    }
+
+    /* ── Section label ────────────────────────────────────────── */
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+
+    .section-label {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-hint);
+      padding-bottom: 6px;
+      border-bottom: 0.5px solid var(--border);
+      flex: 1;
+    }
+
+    /* ── Market table ─────────────────────────────────────────── */
+    .table-wrap {
+      overflow-x: auto;
+      margin-bottom: 14px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+
+    thead th {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--text-hint);
+      font-weight: 500;
+      padding: 5px 10px;
+      text-align: left;
+      border-bottom: 0.5px solid var(--border);
+      white-space: nowrap;
+    }
+
+    thead th.r { text-align: right; }
+
+    tbody td {
+      padding: 7px 10px;
+      border-bottom: 0.5px solid var(--border);
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    tbody td.r { text-align: right; font-variant-numeric: tabular-nums; }
+
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: var(--bg-tertiary); }
+    tbody tr.arb-row { background: var(--green-bg); }
+    tbody tr.arb-row:hover { background: rgba(31,200,133,0.11); }
+
+    .empty-row td {
+      text-align: center;
+      padding: 36px;
+      color: var(--text-hint);
+      font-size: 11px;
+    }
+
+    /* ── Table cell elements ──────────────────────────────────── */
+    .ticker-pill {
+      display: inline-block;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: var(--radius-sm);
+      background: var(--bg-tertiary);
+      border: 0.5px solid var(--border);
+      letter-spacing: 0.05em;
+      color: var(--text-primary);
+    }
+
+    .sector-tag {
+      display: inline-block;
+      font-size: 9px;
+      padding: 1px 6px;
+      border-radius: var(--radius-sm);
+      letter-spacing: 0.04em;
+    }
+
+    .sector-tech   { background: var(--blue-bg); color: var(--blue); }
+    .sector-crypto { background: var(--amber-bg); color: var(--amber); }
+    .sector-macro  { background: rgba(180,178,169,0.1); color: #888780; }
+    .sector-energy { background: rgba(232,85,85,0.08); color: var(--red); }
+
+    .q-text {
+      max-width: 220px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--text-secondary);
+    }
+
+    .spread-bar-wrap { display: flex; align-items: center; justify-content: flex-end; gap: 5px; }
+
+    .spread-bar {
+      height: 5px;
+      border-radius: 2px;
+      min-width: 2px;
+      transition: width 0.35s ease;
+    }
+
+    .arb-badge {
+      display: inline-block;
+      font-size: 9px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: var(--radius-sm);
+      letter-spacing: 0.06em;
+    }
+
+    .arb-strong { background: rgba(31,200,133,0.15); color: var(--green); border: 0.5px solid var(--green-dim); }
+    .arb-weak   { background: var(--amber-bg); color: var(--amber); border: 0.5px solid rgba(240,160,48,0.3); }
+    .arb-none   { background: var(--bg-tertiary); color: var(--text-hint); border: 0.5px solid var(--border); }
+
+    .score-bar-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .score-bar-track {
+      width: 60px;
+      height: 4px;
+      background: var(--bg-tertiary);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .score-bar-fill {
+      height: 4px;
+      border-radius: 2px;
+      transition: width 0.35s ease;
+    }
+
+    /* ── Bottom panels ────────────────────────────────────────── */
+    .bottom-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .panel {
+      background: var(--bg-card);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 12px 14px;
+    }
+
+    .panel-title {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-hint);
+      margin-bottom: 10px;
+      padding-bottom: 7px;
+      border-bottom: 0.5px solid var(--border);
+    }
+
+    /* ── Log panel ────────────────────────────────────────────── */
+    .log-scroll {
+      max-height: 140px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .log-entry {
+      display: flex;
+      gap: 10px;
+      line-height: 1.9;
+      font-size: 10px;
+    }
+
+    .log-ts { color: var(--text-hint); min-width: 54px; flex-shrink: 0; }
+    .log-arb  { color: var(--green); }
+    .log-scan { color: var(--blue); }
+    .log-warn { color: var(--amber); }
+    .log-elim { color: var(--red); }
+    .log-info { color: var(--text-secondary); }
+
+    /* ── Trade history ────────────────────────────────────────── */
+    .trade-scroll {
+      max-height: 140px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .trade-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 0;
+      border-bottom: 0.5px solid var(--border);
+      font-size: 10px;
+    }
+
+    .trade-row:last-child { border-bottom: none; }
+
+    .trade-dir {
+      font-size: 9px;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 3px;
+      letter-spacing: 0.05em;
+      min-width: 34px;
+      text-align: center;
+    }
+
+    .trade-buy  { background: var(--green-bg); color: var(--green); border: 0.5px solid var(--green-dim); }
+    .trade-sell { background: rgba(232,85,85,0.08); color: var(--red); border: 0.5px solid var(--red-dim); }
+
+    .trade-ticker { color: var(--text-primary); font-weight: 500; min-width: 38px; }
+    .trade-detail { color: var(--text-secondary); flex: 1; overflow: hidden; text-overflow: ellipsis; }
+    .trade-spread { color: var(--amber); font-weight: 500; min-width: 36px; text-align: right; }
+
+    /* ── Export button ────────────────────────────────────────── */
+    .export-row {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 10px 0 16px;
+    }
+
+    /* ── Disclaimer ───────────────────────────────────────────── */
+    .disclaimer {
+      font-size: 9px;
+      color: var(--text-hint);
+      text-align: center;
+      padding: 10px 0 20px;
+      border-top: 0.5px solid var(--border);
+      letter-spacing: 0.02em;
+    }
+
+    /* ── Responsive ───────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      .metrics { grid-template-columns: repeat(3, 1fr); }
+      .bottom-grid { grid-template-columns: 1fr; }
+      .q-text { max-width: 140px; }
+    }
+
+    @media (max-width: 480px) {
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <header>
+    <div class="header-left">
+      <div class="app-title">stock<span>Emulator</span> — ARB Detector</div>
+      <div class="app-meta">Polymarket + Yahoo Finance · gracefullight/stock-checker@stock-analysis · v0.1.0</div>
+    </div>
+    <div class="header-right">
+      <span class="data-source-badge" id="dataSourceBadge">MOCK DATA</span>
+      <span class="badge badge-idle" id="statusBadge">IDLE</span>
+    </div>
+  </header>
+
+  <!-- Progress bar -->
+  <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+
+  <!-- Controls -->
+  <div class="controls">
+    <div class="ctrl">
+      <span class="ctrl-label">ARB threshold</span>
+      <div class="ctrl-row">
+        <input type="range" id="arbThresh" min="1" max="25" value="8" step="1" />
+        <span class="ctrl-val" id="arbThreshVal">8¢</span>
+      </div>
+    </div>
+    <div class="ctrl">
+      <span class="ctrl-label">Scan interval</span>
+      <div class="ctrl-row">
+        <input type="range" id="scanSpeed" min="1" max="10" value="3" step="1" />
+        <span class="ctrl-val" id="scanSpeedVal">3s</span>
+      </div>
+    </div>
+    <div class="ctrl">
+      <span class="ctrl-label">Elim. threshold</span>
+      <div class="ctrl-row">
+        <input type="range" id="elimThresh" min="20" max="80" value="45" step="5" />
+        <span class="ctrl-val" id="elimThreshVal">45</span>
+      </div>
+    </div>
+    <div class="ctrl">
+      <span class="ctrl-label">Sector</span>
+      <select id="sectorFilter">
+        <option value="all">All sectors</option>
+        <option value="tech">Tech</option>
+        <option value="crypto">Crypto</option>
+        <option value="macro">Macro</option>
+        <option value="energy">Energy</option>
+      </select>
+    </div>
+    <div class="ctrl">
+      <span class="ctrl-label">Mode</span>
+      <select id="modeSelect">
+        <option value="normal">Normal</option>
+        <option value="volatile">High volatility</option>
+        <option value="quiet">Quiet market</option>
+      </select>
+    </div>
+    <div class="ctrl">
+      <span class="ctrl-label">Data source</span>
+      <select id="dataSource">
+        <option value="mock">Mock (emulator)</option>
+        <option value="live">Live (Polymarket API)</option>
+      </select>
+    </div>
+    <div class="ctrl">
+      <span class="ctrl-label">&nbsp;</span>
+      <div class="ctrl-row" style="gap:8px;">
+        <button class="btn btn-primary" id="btnScan" onclick="toggleScan()">▶ START SCAN</button>
+        <button class="btn" onclick="resetAll()">RESET</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Metrics -->
+  <div class="metrics">
+    <div class="metric-card">
+      <div class="metric-label">Markets scanned</div>
+      <div class="metric-val" id="mScanned">0</div>
+      <div class="metric-sub" id="mScannedSub">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">ARB opportunities</div>
+      <div class="metric-val green" id="mArbs">0</div>
+      <div class="metric-sub" id="mArbRate">0.0% hit rate</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Best spread</div>
+      <div class="metric-val amber" id="mBestSpread">—</div>
+      <div class="metric-sub" id="mBestTicker">—</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Trades executed</div>
+      <div class="metric-val blue" id="mTrades">0</div>
+      <div class="metric-sub" id="mTradesSub">0 BUY · 0 SELL</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-label">Eliminated</div>
+      <div class="metric-val red" id="mElim">0</div>
+      <div class="metric-sub">below score threshold</div>
+    </div>
+  </div>
+
+  <!-- Market table -->
+  <div class="section-header">
+    <span class="section-label">live market feed</span>
+  </div>
+  <div class="table-wrap">
+    <table id="marketTable">
+      <thead>
+        <tr>
+          <th>Ticker</th>
+          <th>Sector</th>
+          <th>Market question</th>
+          <th class="r">Poly price</th>
+          <th class="r">Est. prob</th>
+          <th class="r">Spread</th>
+          <th class="r">Spread</th>
+          <th class="r">Stock score</th>
+          <th class="r">Combined</th>
+          <th class="r">Signal</th>
+          <th class="r">Status</th>
+        </tr>
+      </thead>
+      <tbody id="marketBody">
+        <tr class="empty-row"><td colspan="11">Press START SCAN to begin emulation</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Bottom panels -->
+  <div class="bottom-grid">
+
+    <!-- Event log -->
+    <div class="panel">
+      <div class="panel-title">event log</div>
+      <div class="log-scroll" id="logPanel">
+        <div class="log-entry">
+          <span class="log-ts">--:--:--</span>
+          <span class="log-info">System ready. Configure parameters and press START SCAN.</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Trade history -->
+    <div class="panel">
+      <div class="panel-title">trade history</div>
+      <div class="trade-scroll" id="tradePanel">
+        <div style="color:var(--text-hint);font-size:10px;padding:8px 0;">No trades yet.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Export row -->
+  <div class="export-row">
+    <button class="btn btn-sm" onclick="exportCSV()">↓ Export trades CSV</button>
+    <button class="btn btn-sm" onclick="exportJSON()">↓ Export JSON</button>
+  </div>
+
+  <!-- Disclaimer -->
+  <div class="disclaimer">
+    ⚠ Simulation only — not financial advice. All mock data is randomly generated for educational purposes.
+    Live mode fetches public Polymarket Gamma API. Stock scores are illustrative.
+  </div>
+
+</div>
+
+<!-- ── Scripts ──────────────────────────────────────────────────── -->
+<script>
+
+/* ── Config ─────────────────────────────────────────────────── */
+const CONFIG = {
+  // Run `node proxy.js` first; proxy forwards to gamma-api.polymarket.com with CORS headers
+  polymarketAPI: 'http://localhost:8011/markets',
+  stockWeight:   0.70,
+  polyWeight:    0.30,
+  maxLogLines:   80,
+  maxTrades:     200,
+};
+
+/* ── Mock market data ────────────────────────────────────────── */
+const MOCK_MARKETS = [
+  { ticker:'NVDA',  sector:'tech',   question:'NVDA closes above $900 this week?',              base:0.62, vol:0.08 },
+  { ticker:'TSLA',  sector:'tech',   question:'Tesla earnings beat Q1 estimates?',               base:0.44, vol:0.12 },
+  { ticker:'AAPL',  sector:'tech',   question:'Apple announces AI model before June?',           base:0.55, vol:0.07 },
+  { ticker:'MSFT',  sector:'tech',   question:'Microsoft Copilot+ hits 50M users this Q?',      base:0.47, vol:0.06 },
+  { ticker:'GOOGL', sector:'tech',   question:'Google unveils Gemini 2.0 Ultra this month?',    base:0.53, vol:0.09 },
+  { ticker:'BTC',   sector:'crypto', question:'Bitcoin reaches $110k by month end?',             base:0.38, vol:0.15 },
+  { ticker:'ETH',   sector:'crypto', question:'Ethereum ETF net inflow positive this week?',    base:0.51, vol:0.10 },
+  { ticker:'SOL',   sector:'crypto', question:'Solana outperforms BTC in next 7 days?',         base:0.41, vol:0.13 },
+  { ticker:'SPY',   sector:'macro',  question:'Fed holds rates at next FOMC meeting?',          base:0.71, vol:0.05 },
+  { ticker:'GLD',   sector:'macro',  question:'Gold price above $2,400 end of month?',          base:0.65, vol:0.06 },
+  { ticker:'XOM',   sector:'energy', question:'Oil stays above $78/bbl through Friday?',        base:0.58, vol:0.09 },
+  { ticker:'CVX',   sector:'energy', question:'Chevron raises dividend in Q2 announcement?',    base:0.49, vol:0.07 },
+];
+
+/* ── State ───────────────────────────────────────────────────── */
+let scanning     = false;
+let scanTimer    = null;
+let rafTimer     = null;
+let scanCount    = 0;
+let arbCount     = 0;
+let buyCount     = 0;
+let sellCount    = 0;
+let elimCount    = 0;
+let bestSpread   = 0;
+let bestTicker   = '—';
+let logLines     = [];
+let tradeHistory = [];
+let marketState  = {};
+
+MOCK_MARKETS.forEach(m => {
+  marketState[m.ticker] = {
+    polyPrice:  m.base,
+    estProb:    m.base,
+    stockScore: Math.round(40 + Math.random() * 40),
+  };
+});
+
+/* ── Helpers ─────────────────────────────────────────────────── */
+function nowStr() {
+  const d = new Date();
+  return [d.getHours(), d.getMinutes(), d.getSeconds()]
+    .map(x => String(x).padStart(2,'0')).join(':');
+}
+
+function fmtC(n)  { return (n * 100).toFixed(1) + '¢'; }
+function fmtPct(n){ return (n * 100).toFixed(1) + '%'; }
+
+function jitter(val, vol) {
+  const mode = document.getElementById('modeSelect').value;
+  const mult = mode === 'volatile' ? 2.4 : mode === 'quiet' ? 0.25 : 1.0;
+  return Math.max(0.02, Math.min(0.97, val + (Math.random() - 0.5) * vol * mult * 2));
+}
+
+function stockJitter(score) {
+  return Math.max(5, Math.min(99, score + Math.round((Math.random() - 0.5) * 12)));
+}
+
+function combined(stockScore, polyProb) {
+  return +(stockScore * CONFIG.stockWeight + polyProb * 100 * CONFIG.polyWeight).toFixed(1);
+}
+
+function getSector()    { return document.getElementById('sectorFilter').value; }
+function getThresh()    { return parseInt(document.getElementById('arbThresh').value) / 100; }
+function getElimScore() { return parseInt(document.getElementById('elimThresh').value); }
+function getSpeed()     { return parseInt(document.getElementById('scanSpeed').value) * 1000; }
+function getDataSrc()   { return document.getElementById('dataSource').value; }
+
+/* ── Controls wiring ─────────────────────────────────────────── */
+document.getElementById('arbThresh').addEventListener('input', function() {
+  document.getElementById('arbThreshVal').textContent = this.value + '¢';
+});
+
+document.getElementById('scanSpeed').addEventListener('input', function() {
+  document.getElementById('scanSpeedVal').textContent = this.value + 's';
+  if (scanning) { clearInterval(scanTimer); scanTimer = setInterval(runScan, getSpeed()); }
+});
+
+document.getElementById('elimThresh').addEventListener('input', function() {
+  document.getElementById('elimThreshVal').textContent = this.value;
+});
+
+document.getElementById('dataSource').addEventListener('change', function() {
+  const badge = document.getElementById('dataSourceBadge');
+  if (this.value === 'live') {
+    badge.textContent = 'LIVE API';
+    badge.classList.add('live-data');
+    addLog('Switched to Polymarket Gamma API (live).', 'log-warn');
+  } else {
+    badge.textContent = 'MOCK DATA';
+    badge.classList.remove('live-data');
+    addLog('Switched to mock emulator data.', 'log-info');
+  }
+});
+
+/* ── Logger ──────────────────────────────────────────────────── */
+function addLog(msg, cls) {
+  logLines.push({ t: nowStr(), msg, cls: cls || 'log-info' });
+  if (logLines.length > CONFIG.maxLogLines) logLines.shift();
+  const panel = document.getElementById('logPanel');
+  panel.innerHTML = logLines.slice().reverse().map(l =>
+    `<div class="log-entry">
+       <span class="log-ts">${l.t}</span>
+       <span class="${l.cls}">${l.msg}</span>
+     </div>`
+  ).join('');
+}
+
+/* ── Trade history ───────────────────────────────────────────── */
+function addTrade(ticker, dir, polyPrice, estProb, spread) {
+  tradeHistory.unshift({ ts: nowStr(), ticker, dir, polyPrice, estProb, spread });
+  if (tradeHistory.length > CONFIG.maxTrades) tradeHistory.pop();
+  renderTrades();
+}
+
+function renderTrades() {
+  const panel = document.getElementById('tradePanel');
+  if (!tradeHistory.length) {
+    panel.innerHTML = '<div style="color:var(--text-hint);font-size:10px;padding:8px 0;">No trades yet.</div>';
+    return;
+  }
+  panel.innerHTML = tradeHistory.slice(0, 40).map(t => `
+    <div class="trade-row">
+      <span class="trade-dir trade-${t.dir.toLowerCase()}">${t.dir}</span>
+      <span class="trade-ticker">${t.ticker}</span>
+      <span class="trade-detail">
+        ${(t.polyPrice * 100).toFixed(1)}¢ → ${(t.estProb * 100).toFixed(1)}¢
+      </span>
+      <span class="trade-spread">${(t.spread * 100).toFixed(1)}¢</span>
+      <span style="color:var(--text-hint);font-size:9px;">${t.ts}</span>
+    </div>
+  `).join('');
+}
+
+/* ── Scan toggle ─────────────────────────────────────────────── */
+function toggleScan() {
+  if (scanning) stopScan(); else startScan();
+}
+
+function startScan() {
+  scanning = true;
+  document.getElementById('btnScan').textContent  = '■ STOP SCAN';
+  document.getElementById('btnScan').className    = 'btn btn-stop';
+  document.getElementById('statusBadge').textContent = 'LIVE';
+  document.getElementById('statusBadge').className   = 'badge badge-live';
+  addLog('Scanner started.', 'log-scan');
+  runScan();
+  scanTimer = setInterval(runScan, getSpeed());
+  animateProgress();
+}
+
+function stopScan() {
+  scanning = false;
+  clearInterval(scanTimer);
+  cancelAnimationFrame(rafTimer);
+  document.getElementById('btnScan').textContent  = '▶ START SCAN';
+  document.getElementById('btnScan').className    = 'btn btn-primary';
+  document.getElementById('statusBadge').textContent = 'PAUSED';
+  document.getElementById('statusBadge').className   = 'badge badge-paused';
+  document.getElementById('progressFill').style.width = '0%';
+  addLog('Scanner paused.', 'log-warn');
+}
+
+/* ── Progress animation ──────────────────────────────────────── */
+function animateProgress() {
+  const fill  = document.getElementById('progressFill');
+  const speed = getSpeed();
+  let start   = null;
+  function step(ts) {
+    if (!scanning) return;
+    if (!start) start = ts;
+    const pct = Math.min(100, ((ts - start) / speed) * 100);
+    fill.style.width = pct + '%';
+    if (pct < 100) {
+      rafTimer = requestAnimationFrame(step);
+    } else {
+      fill.style.width = '0%';
+      if (scanning) { start = null; rafTimer = requestAnimationFrame(step); }
+    }
+  }
+  rafTimer = requestAnimationFrame(step);
+}
+
+/* ── Main scan ───────────────────────────────────────────────── */
+async function runScan() {
+  const sector   = getSector();
+  const thresh   = getThresh();
+  const elimMin  = getElimScore();
+  const filtered = MOCK_MARKETS.filter(m => sector === 'all' || m.sector === sector);
+
+  if (getDataSrc() === 'live') {
+    await fetchLiveData(filtered, thresh, elimMin);
+  } else {
+    runMockScan(filtered, thresh, elimMin);
+  }
+}
+
+/* ── Mock scan ───────────────────────────────────────────────── */
+function runMockScan(markets, thresh, elimMin) {
+  markets.forEach(m => {
+    const s = marketState[m.ticker];
+    s.polyPrice  = jitter(s.polyPrice,  m.vol * 0.4);
+    s.estProb    = jitter(m.base,       m.vol * 0.5);
+    s.stockScore = stockJitter(s.stockScore);
+    marketState[m.ticker] = s;
+  });
+
+  processScan(markets, thresh, elimMin);
+}
+
+/* ── Ticker → Polymarket search keyword map ──────────────────── */
+const TICKER_KEYWORDS = {
+  NVDA:  'nvidia',  TSLA:  'tesla',   AAPL:  'apple',
+  MSFT:  'microsoft', GOOGL: 'google', BTC:   'bitcoin',
+  ETH:   'ethereum', SOL:   'solana',  SPY:   'fed rate',
+  GLD:   'gold',    XOM:   'oil',     CVX:   'chevron',
+};
+
+/* ── Live Polymarket fetch ───────────────────────────────────── */
+async function fetchLiveData(markets, thresh, elimMin) {
+  addLog('Fetching Polymarket Gamma API...', 'log-scan');
+  let fetchedAny = false;
+
+  for (const m of markets) {
+    try {
+      const keyword = TICKER_KEYWORDS[m.ticker] || m.ticker.toLowerCase();
+      const url  = `${CONFIG.polymarketAPI}?search=${encodeURIComponent(keyword)}&active=true&limit=5`;
+      const res  = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      if (data && data.length) {
+        const top  = data.sort((a, b) => (parseFloat(b.volume) || 0) - (parseFloat(a.volume) || 0))[0];
+
+        // outcomePrices is a JSON-encoded string array e.g. '["0.62","0.38"]'
+        let prob = 0.5;
+        try {
+          const prices = typeof top.outcomePrices === 'string'
+            ? JSON.parse(top.outcomePrices)
+            : top.outcomePrices;
+          prob = parseFloat(prices?.[0] ?? 0.5);
+        } catch (_) { /* malformed — keep 0.5 default */ }
+
+        marketState[m.ticker].polyPrice  = Math.max(0.02, Math.min(0.97, prob));
+        marketState[m.ticker].estProb    = jitter(m.base, m.vol * 0.3);
+        marketState[m.ticker].stockScore = stockJitter(marketState[m.ticker].stockScore);
+        fetchedAny = true;
+        addLog(`[${m.ticker}] "${top.question?.slice(0,55)}…" → ${(prob*100).toFixed(1)}¢`, 'log-scan');
+      } else {
+        addLog(`[${m.ticker}] No Polymarket match for "${keyword}" — mock fallback.`, 'log-warn');
+        const s = marketState[m.ticker];
+        s.polyPrice  = jitter(s.polyPrice, m.vol * 0.4);
+        s.estProb    = jitter(m.base,      m.vol * 0.5);
+        s.stockScore = stockJitter(s.stockScore);
+      }
+    } catch (err) {
+      addLog(`CORS/fetch error for ${m.ticker} — mock fallback. (${err.message})`, 'log-warn');
+      const s = marketState[m.ticker];
+      s.polyPrice  = jitter(s.polyPrice, m.vol * 0.4);
+      s.estProb    = jitter(m.base,      m.vol * 0.5);
+      s.stockScore = stockJitter(s.stockScore);
+    }
+  }
+
+  if (fetchedAny) addLog('Live Polymarket data applied.', 'log-scan');
+  processScan(markets, thresh, elimMin);
+}
+
+/* ── Process scan results ────────────────────────────────────── */
+function processScan(markets, thresh, elimMin) {
+  let localArbs = 0;
+  let localElim = 0;
+
+  markets.forEach(m => {
+    const s        = marketState[m.ticker];
+    const spread   = Math.abs(s.polyPrice - s.estProb);
+    const combo    = combined(s.stockScore, s.estProb);
+    const isElim   = combo < elimMin;
+    const isArb    = spread >= thresh && !isElim;
+    const isStrong = spread >= thresh * 1.8 && !isElim;
+
+    if (isElim) {
+      localElim++;
+    } else if (isArb) {
+      localArbs++;
+      arbCount++;
+      const dir = s.estProb > s.polyPrice ? 'BUY' : 'SELL';
+      dir === 'BUY' ? buyCount++ : sellCount++;
+      addTrade(m.ticker, dir, s.polyPrice, s.estProb, spread);
+
+      if (spread > bestSpread) {
+        bestSpread = spread;
+        bestTicker = m.ticker;
+        document.getElementById('mBestSpread').textContent = fmtC(bestSpread);
+        document.getElementById('mBestTicker').textContent = bestTicker;
+      }
+
+      addLog(
+        `ARB [${m.ticker}] ${dir} @ ${fmtC(s.polyPrice)} → est ${fmtC(s.estProb)} spread=${fmtC(spread)} combo=${combo.toFixed(0)}`,
+        isStrong ? 'log-arb' : 'log-warn'
+      );
+    }
+  });
+
+  scanCount  += markets.length;
+  elimCount   = localElim;
+
+  document.getElementById('mScanned').textContent = scanCount;
+  document.getElementById('mScannedSub').textContent = `${markets.length} markets/scan`;
+  document.getElementById('mArbs').textContent    = arbCount;
+  document.getElementById('mArbRate').textContent = scanCount > 0
+    ? ((arbCount / scanCount) * 100).toFixed(1) + '% hit rate'
+    : '0.0% hit rate';
+  document.getElementById('mTrades').textContent  = buyCount + sellCount;
+  document.getElementById('mTradesSub').textContent = `${buyCount} BUY · ${sellCount} SELL`;
+  document.getElementById('mElim').textContent    = localElim;
+
+  if (localArbs === 0 && localElim === 0) {
+    addLog(
+      `Scan complete: no ARB above ${Math.round(getThresh()*100)}¢ threshold.`,
+      'log-scan'
+    );
+  }
+
+  renderTable(markets, thresh, elimMin);
+}
+
+/* ── Render market table ─────────────────────────────────────── */
+function renderTable(markets, thresh, elimMin) {
+  const tbody = document.getElementById('marketBody');
+
+  tbody.innerHTML = markets.map(m => {
+    const s       = marketState[m.ticker];
+    const spread  = s.estProb - s.polyPrice;
+    const absSprd = Math.abs(spread);
+    const combo   = combined(s.stockScore, s.estProb);
+    const isElim  = combo < elimMin;
+    const isArb   = absSprd >= thresh && !isElim;
+    const isStrg  = absSprd >= thresh * 1.8 && !isElim;
+
+    const barW     = Math.min(100, (absSprd / 0.30) * 100);
+    const barColor = isStrg  ? '#1fc885'
+                   : isArb   ? '#f0a030'
+                   : isElim  ? '#555a63'
+                   : '#555a63';
+
+    const polyColor = spread > 0 ? '#e85555' : '#1fc885';
+    const estColor  = spread > 0 ? '#1fc885' : '#e85555';
+
+    const comboColor = combo >= 65 ? '#1fc885'
+                     : combo >= 45 ? '#f0a030'
+                     : '#e85555';
+
+    const scoreBarColor = s.stockScore >= 60 ? '#1fc885'
+                        : s.stockScore >= 40 ? '#f0a030'
+                        : '#e85555';
+
+    const signalText = isElim ? 'ELIM'
+                     : isStrg ? 'STRONG ARB'
+                     : isArb  ? 'ARB'
+                     : '—';
+    const signalCls  = isElim ? 'arb-none'
+                     : isStrg ? 'arb-strong'
+                     : isArb  ? 'arb-weak'
+                     : 'arb-none';
+
+    const statusText  = isElim ? 'ELIMINATED' : 'ACTIVE';
+    const statusColor = isElim ? 'var(--text-hint)' : 'var(--green)';
+
+    return `<tr class="${isArb || isStrg ? 'arb-row' : ''}">
+      <td><span class="ticker-pill">${m.ticker}</span></td>
+      <td><span class="sector-tag sector-${m.sector}">${m.sector}</span></td>
+      <td><span class="q-text" title="${m.question}">${m.question}</span></td>
+      <td class="r" style="color:${polyColor};">${fmtPct(s.polyPrice)}</td>
+      <td class="r" style="color:${estColor};">${fmtPct(s.estProb)}</td>
+      <td class="r" style="color:${isArb||isStrg ? '#f0a030' : 'var(--text-hint)'};">${fmtC(absSprd)}</td>
+      <td class="r">
+        <div class="spread-bar-wrap">
+          <div class="spread-bar" style="width:${barW.toFixed(0)}px;background:${barColor};"></div>
+        </div>
+      </td>
+      <td class="r">
+        <div class="score-bar-wrap" style="justify-content:flex-end;">
+          <span style="color:var(--text-secondary);">${s.stockScore}</span>
+          <div class="score-bar-track">
+            <div class="score-bar-fill" style="width:${s.stockScore}%;background:${scoreBarColor};"></div>
+          </div>
+        </div>
+      </td>
+      <td class="r" style="color:${comboColor};font-weight:500;">${combo.toFixed(0)}</td>
+      <td class="r"><span class="arb-badge ${signalCls}">${signalText}</span></td>
+      <td class="r" style="color:${statusColor};font-size:9px;letter-spacing:0.05em;">${statusText}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ── Reset ───────────────────────────────────────────────────── */
+function resetAll() {
+  stopScan();
+  scanCount = 0; arbCount = 0; buyCount = 0; sellCount = 0;
+  elimCount = 0; bestSpread = 0; bestTicker = '—';
+  tradeHistory = [];
+  logLines     = [];
+  MOCK_MARKETS.forEach(m => {
+    marketState[m.ticker] = {
+      polyPrice:  m.base,
+      estProb:    m.base,
+      stockScore: Math.round(40 + Math.random() * 40),
+    };
+  });
+  document.getElementById('mScanned').textContent    = '0';
+  document.getElementById('mScannedSub').textContent = '—';
+  document.getElementById('mArbs').textContent       = '0';
+  document.getElementById('mArbRate').textContent    = '0.0% hit rate';
+  document.getElementById('mBestSpread').textContent = '—';
+  document.getElementById('mBestTicker').textContent = '—';
+  document.getElementById('mTrades').textContent     = '0';
+  document.getElementById('mTradesSub').textContent  = '0 BUY · 0 SELL';
+  document.getElementById('mElim').textContent       = '0';
+  document.getElementById('statusBadge').textContent = 'IDLE';
+  document.getElementById('statusBadge').className   = 'badge badge-idle';
+  document.getElementById('btnScan').textContent     = '▶ START SCAN';
+  document.getElementById('btnScan').className       = 'btn btn-primary';
+  document.getElementById('marketBody').innerHTML    =
+    '<tr class="empty-row"><td colspan="11">Press START SCAN to begin emulation</td></tr>';
+  document.getElementById('logPanel').innerHTML =
+    '<div class="log-entry"><span class="log-ts">--:--:--</span><span class="log-info">System reset.</span></div>';
+  renderTrades();
+}
+
+/* ── Export CSV ──────────────────────────────────────────────── */
+function exportCSV() {
+  if (!tradeHistory.length) { addLog('No trades to export.', 'log-warn'); return; }
+  const header = 'Timestamp,Ticker,Direction,PolyPrice,EstProb,Spread\n';
+  const rows   = tradeHistory.map(t =>
+    `${t.ts},${t.ticker},${t.dir},${(t.polyPrice*100).toFixed(2)},${(t.estProb*100).toFixed(2)},${(t.spread*100).toFixed(2)}`
+  ).join('\n');
+  downloadFile('arb-trades.csv', header + rows, 'text/csv');
+  addLog(`Exported ${tradeHistory.length} trades to CSV.`, 'log-scan');
+}
+
+/* ── Export JSON ─────────────────────────────────────────────── */
+function exportJSON() {
+  const payload = {
+    exportedAt:    new Date().toISOString(),
+    totalScanned:  scanCount,
+    totalArbs:     arbCount,
+    trades:        tradeHistory,
+    marketSnapshot: Object.entries(marketState).map(([ticker, s]) => ({
+      ticker,
+      polyPrice:  +(s.polyPrice*100).toFixed(2),
+      estProb:    +(s.estProb*100).toFixed(2),
+      stockScore: s.stockScore,
+      combined:   combined(s.stockScore, s.estProb),
+    }))
+  };
+  downloadFile('arb-snapshot.json', JSON.stringify(payload, null, 2), 'application/json');
+  addLog('Exported market snapshot to JSON.', 'log-scan');
+}
+
+/* ── Download helper ─────────────────────────────────────────── */
+function downloadFile(filename, content, type) {
+  const blob = new Blob([content], { type });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+</script>
+</body>
+</html>
