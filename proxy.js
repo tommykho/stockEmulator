@@ -78,8 +78,20 @@ http.createServer((req, res) => {
   });
 
   proxy.end();
+}).on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\nPort ${PORT} is already in use.\n`);
+    console.error(`To find and kill the process (run in cmd.exe or PowerShell, NOT Git Bash):`);
+    console.error(`  netstat -ano | findstr :${PORT}`);
+    console.error(`  taskkill /PID <pid> /F\n`);
+    console.error(`Or change PROXY_PORT in .env and update CONFIG.polymarketAPI / CONFIG.yahooAPI in index.html.\n`);
+  } else {
+    console.error(err);
+  }
+  process.exit(1);
 }).listen(PORT, () => {
   console.log(`CORS proxy listening on http://localhost:${PORT}`);
   console.log(`  /markets* → https://gamma-api.polymarket.com`);
   console.log(`  /yahoo/*  → https://query1.finance.yahoo.com`);
+  console.log(`\nPress Ctrl+C to stop.\n`);
 });
