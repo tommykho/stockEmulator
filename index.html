@@ -1082,19 +1082,46 @@ async function fetchLiveData(markets, thresh, elimMin) {
         new Date(mk.endDate).getTime() > now
       );
 
-      if (open.length) {
-        const top  = open.sort((a, b) => (parseFloat(b.volume) || 0) - (parseFloat(a.volume) || 0))[0];
+      // Prefer binary Yes/No markets; filter out implausible probabilities
+      const binary = open.filter(mk => {
+        try {
+          const oc = typeof mk.outcomes === 'string' ? JSON.parse(mk.outcomes) : mk.outcomes;
+          return Array.isArray(oc) && oc.length === 2;
+        } catch (_) { return false; }
+      });
+      const pool = binary.length ? binary : open;
+
+      if (pool.length) {
+        const top  = pool.sort((a, b) => (parseFloat(b.volume) || 0) - (parseFloat(a.volume) || 0))[0];
+
+        // Find "Yes" outcome index; default to 0
+        let yesIdx = 0;
+        try {
+          const oc = typeof top.outcomes === 'string' ? JSON.parse(top.outcomes) : top.outcomes;
+          const idx = (oc || []).findIndex(o => o.toLowerCase() === 'yes');
+          if (idx >= 0) yesIdx = idx;
+        } catch (_) {}
 
         // outcomePrices is a JSON-encoded string array e.g. '["0.62","0.38"]'
-        let prob = 0.5;
+        let prob = null;
         try {
           const prices = typeof top.outcomePrices === 'string'
             ? JSON.parse(top.outcomePrices)
             : top.outcomePrices;
-          prob = parseFloat(prices?.[0] ?? 0.5);
-        } catch (_) { /* malformed — keep 0.5 default */ }
+          const raw = parseFloat(prices?.[yesIdx]);
+          if (!isNaN(raw) && raw >= 0.05 && raw <= 0.95) prob = raw;
+        } catch (_) {}
 
-        marketState[m.ticker].polyPrice  = Math.max(0.02, Math.min(0.97, prob));
+        if (prob === null) {
+          addLog(`[${m.ticker}] Prob out of range — mock fallback.`, 'log-warn');
+          const s = marketState[m.ticker];
+          s.polyPrice  = jitter(s.polyPrice, m.vol * 0.4);
+          s.estProb    = jitter(m.base,      m.vol * 0.5);
+          s.stockScore = stockJitter(s.stockScore);
+          continue;
+        }
+
+        marketState[m.ticker].polyPrice  = prob;
         marketState[m.ticker].estProb    = jitter(m.base, m.vol * 0.3);
         marketState[m.ticker].stockScore = stockJitter(marketState[m.ticker].stockScore);
         fetchedAny = true;
@@ -1191,7 +1218,7 @@ function renderTable(markets, thresh, elimMin) {
     const isArb   = absSprd >= thresh && !isElim;
     const isStrg  = absSprd >= thresh * 1.8 && !isElim;
 
-    const barW     = Math.min(50, (absSprd / 0.30) * 100);
+    const barW     = Math.min(100, (absSprd / Math.max(thresh * 3, 0.15)) * 100);
     const barColor = isStrg  ? '#1fc885'
                    : isArb   ? '#f0a030'
                    : isElim  ? '#555a63'
