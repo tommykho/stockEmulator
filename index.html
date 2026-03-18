@@ -935,13 +935,22 @@ async function fetchLiveData(markets, thresh, elimMin) {
   for (const m of markets) {
     try {
       const keyword = TICKER_KEYWORDS[m.ticker] || m.ticker.toLowerCase();
-      const url  = `${CONFIG.polymarketAPI}?search=${encodeURIComponent(keyword)}&active=true&limit=5`;
+      const url  = `${CONFIG.polymarketAPI}?search=${encodeURIComponent(keyword)}&active=true&closed=false&limit=10`;
       const res  = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
 
-      if (data && data.length) {
-        const top  = data.sort((a, b) => (parseFloat(b.volume) || 0) - (parseFloat(a.volume) || 0))[0];
+      // Keep only markets whose endDate is in the future and are not closed/resolved
+      const now   = Date.now();
+      const open  = (data || []).filter(mk =>
+        !mk.closed &&
+        !mk.archived &&
+        mk.endDate &&
+        new Date(mk.endDate).getTime() > now
+      );
+
+      if (open.length) {
+        const top  = open.sort((a, b) => (parseFloat(b.volume) || 0) - (parseFloat(a.volume) || 0))[0];
 
         // outcomePrices is a JSON-encoded string array e.g. '["0.62","0.38"]'
         let prob = 0.5;
@@ -958,7 +967,7 @@ async function fetchLiveData(markets, thresh, elimMin) {
         fetchedAny = true;
         addLog(`[${m.ticker}] "${top.question?.slice(0,55)}…" → ${(prob*100).toFixed(1)}¢`, 'log-scan');
       } else {
-        addLog(`[${m.ticker}] No Polymarket match for "${keyword}" — mock fallback.`, 'log-warn');
+        addLog(`[${m.ticker}] No open Polymarket market for "${keyword}" — mock fallback.`, 'log-warn');
         const s = marketState[m.ticker];
         s.polyPrice  = jitter(s.polyPrice, m.vol * 0.4);
         s.estProb    = jitter(m.base,      m.vol * 0.5);
