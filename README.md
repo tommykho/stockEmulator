@@ -191,3 +191,13 @@ Polymarket Gamma API                     Yahoo Finance
 ## Disclaimer
 
 Simulation only. Not financial advice. Mock data is randomly generated for educational purposes. Live mode fetches public Polymarket data. Stock scores are illustrative.
+
+## License
+
+This project is licensed under the [GNU General Public License v3.0 (GPL-3.0)](https://github.com/tommykho/edgetts/blob/main/LICENSE).
+
+## Support
+
+If you find this useful, consider buying me a coffee!
+
+[![Donate via PayPal](https://img.shields.io/badge/Donate-PayPal-blue?logo=paypal)](https://paypal.me/tommykho)
